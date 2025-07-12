@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Twibbon Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+  <div class="max-w-xl mx-auto bg-white p-6 rounded-lg shadow-lg space-y-4">
+    <h1 class="text-2xl font-bold text-center">Twibbon Generator</h1>
+
+    <!-- Upload Bingkai -->
+    <div>
+      <label class="font-semibold block mb-1">Upload Bingkai PNG (Transparan):</label>
+      <input type="file" id="uploadFrame" accept="image/png" class="w-full border rounded px-3 py-2" />
+    </div>
+
+    <!-- Tombol Share -->
+    <div id="linkArea" class="hidden space-y-2">
+      <label class="font-semibold block">Link untuk dibagikan:</label>
+      <input type="text" id="frameLink" class="w-full border px-3 py-2 text-sm" readonly />
+      <div class="flex gap-2">
+        <button onclick="copyLink()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+          Salin & Bagikan
+        </button>
+        <button onclick="tryLink()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Coba Sebagai Pengguna
+        </button>
+      </div>
+    </div>
+
+    <!-- Upload Foto -->
+    <div id="photoInput" class="hidden">
+      <label class="font-semibold block mb-1">Upload Foto Anda:</label>
+      <input type="file" id="uploadPhoto" accept="image/*" class="w-full border rounded px-3 py-2" />
+    </div>
+
+    <!-- Canvas Preview -->
+    <div class="text-center">
+      <canvas id="canvas" width="500" height="500" class="mx-auto border cursor-move"></canvas>
+    </div>
+
+    <!-- Tombol Download -->
+    <div class="text-center">
+      <button onclick="download()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+        Download Hasil
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const frameInput = document.getElementById("uploadFrame");
+    const photoInput = document.getElementById("uploadPhoto");
+    const photoDiv = document.getElementById("photoInput");
+
+    const linkArea = document.getElementById("linkArea");
+    const frameLink = document.getElementById("frameLink");
+
+    let fotoImage = null;
+    let frameImage = null;
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+    let imgX = 0;
+    let imgY = 0;
+    let imgWidth = canvas.width;
+    let imgHeight = canvas.height;
+
+    // === Handle Upload Bingkai ===
+    frameInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file && file.type === "image/png") {
+        const fileName = file.name;
+        const uploadPath = `img/${fileName}`; // simpan di folder img/
+        const blobURL = URL.createObjectURL(file);
+
+        frameImage = new Image();
+        frameImage.onload = () => {
+          drawCanvas();
+          linkArea.classList.remove("hidden");
+          photoDiv.classList.remove("hidden");
+
+          // buat link share otomatis
+          const baseURL = window.location.origin + window.location.pathname;
+          const fullLink = `${baseURL}?frame=${uploadPath}`;
+          frameLink.value = fullLink;
+        };
+        frameImage.src = blobURL;
+      }
+    });
+
+    // === Tombol Salin Link ===
+    function copyLink() {
+      frameLink.select();
+      document.execCommand("copy");
+      alert("Link berhasil disalin!");
+    }
+
+    // === Tombol Coba Sebagai User ===
+    function tryLink() {
+      const url = frameLink.value;
+      window.location.href = url;
+    }
+
+    // === Handle Upload Foto ===
+    photoInput.addEventListener("change", (e) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        fotoImage = new Image();
+        fotoImage.onload = () => {
+          imgWidth = canvas.width;
+          imgHeight = (fotoImage.height / fotoImage.width) * canvas.width;
+          imgX = 0;
+          imgY = 0;
+          drawCanvas();
+        };
+        fotoImage.src = event.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    });
+
+    // === Handle frame dari URL
+    window.onload = () => {
+      const params = new URLSearchParams(window.location.search);
+      const frameURL = params.get("frame");
+
+      if (frameURL) {
+        frameImage = new Image();
+        frameImage.crossOrigin = "anonymous";
+        frameImage.onload = () => {
+          drawCanvas();
+          photoDiv.classList.remove("hidden");
+        };
+        frameImage.src = frameURL;
+      }
+    };
+
+    function drawCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (fotoImage) {
+        ctx.drawImage(fotoImage, imgX, imgY, imgWidth, imgHeight);
+      }
+      if (frameImage) {
+        ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    // === Drag Foto
+    canvas.addEventListener("mousedown", startDrag);
+    canvas.addEventListener("mousemove", onDrag);
+    canvas.addEventListener("mouseup", stopDrag);
+    canvas.addEventListener("touchstart", startDrag);
+    canvas.addEventListener("touchmove", onDrag);
+    canvas.addEventListener("touchend", stopDrag);
+
+    function getMousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      if (evt.touches) {
+        return {
+          x: evt.touches[0].clientX - rect.left,
+          y: evt.touches[0].clientY - rect.top
+        };
+      } else {
+        return {
+          x: evt.clientX - rect.left,
+          y: evt.clientY - rect.top
+        };
+      }
+    }
+
+    function startDrag(evt) {
+      dragging = true;
+      const pos = getMousePos(evt);
+      offsetX = pos.x - imgX;
+      offsetY = pos.y - imgY;
+      evt.preventDefault();
+    }
+
+    function onDrag(evt) {
+      if (dragging && fotoImage) {
+        const pos = getMousePos(evt);
+        imgX = pos.x - offsetX;
+        imgY = pos.y - offsetY;
+        drawCanvas();
+        evt.preventDefault();
+      }
+    }
+
+    function stopDrag() {
+      dragging = false;
+    }
+
+    function download() {
+      const link = document.createElement("a");
+      link.download = "twibbon.png";
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+  </script>
+</body>
+</html>
